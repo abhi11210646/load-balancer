@@ -2,21 +2,44 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
-	"net/http"
+	"net"
 )
 
 func main() {
 	fmt.Println("Starting Load Balancer on PORT", Config.Port)
 
-	// if len(Config.Servers) == 0 {
-	// 	fmt.Println("No nodes present to balance load.Exiting...")
-	// 	os.Exit(0)
-	// }
-	// fmt.Println("Heart Beat Interval:", Config.HeartBeatInterval, "ms")
+	ln, err := net.Listen("tcp", Config.Port)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, World!")
-	})
-	log.Fatal(http.ListenAndServe(Config.Port, nil))
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		go handleConn(conn)
+	}
+
+}
+
+func handleConn(src net.Conn) {
+	defer src.Close()
+	fmt.Printf("Received request from %s", src.RemoteAddr())
+	dst, err := net.Dial("tcp", "127.0.0.1:3001")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer dst.Close()
+	go func() {
+		_, err := io.Copy(dst, src)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+	if _, err := io.Copy(src, dst); err != nil {
+		log.Fatal(err)
+	}
 }
