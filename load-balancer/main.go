@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+	lb := NewLoadBalancer()
 	fmt.Println("Starting Load Balancer on PORT", Config.Port)
 
 	ln, err := net.Listen("tcp", Config.Port)
