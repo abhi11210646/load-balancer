@@ -10,7 +10,7 @@ import (
 var PORT string
 
 func main() {
-	flag.StringVar(&PORT, "p", ":3000", "Server PORT")
+	flag.StringVar(&PORT, "p", ":3001", "Server PORT")
 	flag.Parse()
 	fmt.Println("Starting server on PORT", PORT)
 
@@ -22,7 +22,10 @@ func main() {
 		fmt.Printf("User-Agent: %s\n", r.UserAgent())
 		fmt.Printf("Accept: %s\n", r.Header.Get("Accept"))
 
-		// fmt.Fprintf(w, "Response from %s \n", PORT)
+		fmt.Fprintf(w, "Response from %s \n", PORT)
+	})
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "OK")
 	})
 	log.Fatal(http.ListenAndServe(PORT, nil))
 }
