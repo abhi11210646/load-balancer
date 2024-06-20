@@ -30,10 +30,12 @@ func (lb *LoadBalancer) getServer() node.Server {
 }
 
 func (lb *LoadBalancer) ListenAndServe() error {
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello World\n"))
-	})
+	http.HandleFunc("/", lb.handleConnection)
 	log.Println("Load balancer is listening on", lb.Port)
 	return http.ListenAndServe(lb.Port, nil)
+}
+
+func (lb *LoadBalancer) handleConnection(w http.ResponseWriter, r *http.Request) {
+	server := lb.getServer()
+	w.Write([]byte("Hello World from " + server.Url + "\n"))
 }
