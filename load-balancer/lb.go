@@ -1,71 +1,39 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"net"
+	"log"
+	"net/http"
+
+	algo "github.com/load-balancer/load-balancer/internal/algorithm"
+	node "github.com/load-balancer/load-balancer/internal/server"
 )
 
 type LoadBalancer struct {
 	Port    string
-	servers []Server
-	algo    RoutingAlgorithm
+	servers []node.Server
+	algo    algo.RoutingAlgorithm
 }
 
 func NewLoadBalancer() *LoadBalancer {
 	return &LoadBalancer{
 		Port: Config.Port,
-		servers: []Server{
-			{url: "http://localhost:3001", active: true},
-			{url: "http://localhost:3002", active: true},
+		servers: []node.Server{
+			{Url: "http://localhost:3001", Active: true},
+			{Url: "http://localhost:3002", Active: true},
 		},
-		algo: &RoundRobin{current_index: -1},
+		algo: &algo.RoundRobin{},
 	}
 }
 
-func (lb *LoadBalancer) getServer() Server {
-	return lb.algo.getNextServer(lb.servers)
-
+func (lb *LoadBalancer) getServer() node.Server {
+	return lb.algo.GetNextServer(lb.servers)
 }
 
-func (lb *LoadBalancer) ListenAndServe() {
+func (lb *LoadBalancer) ListenAndServe() error {
 
-	ln, err := net.Listen("tcp", lb.Port)
-	if err != nil {
-		fmt.Println("error Listen", err)
-	}
-	fmt.Println("Starting Load Balancer on PORT", lb.Port)
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			fmt.Println("error Accept", err)
-		}
-		go handleConn(conn)
-	}
-
-}
-
-func handleConn(src net.Conn) {
-	// buffer := make([]byte, 1024)
-	// _, err := src.Read(buffer)
-	// if err != nil {
-	// 	fmt.Println("Error:", err)
-	// 	return
-	// }
-
-	scanner := bufio.NewScanner(src)
-	for scanner.Scan() {
-		t := scanner.Text()
-		fmt.Println(t)
-		if t == "" {
-			// Empty line encountered, indicating end of headers
-			break
-		}
-	}
-
-	fmt.Println("---------------")
-	src.Write([]byte("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nDate: Sat, 01 May 2024 12:00:00 GMT\r\nServer: MyServer/1.0\r\n\r\ndataaaaa\n"))
-
-	// src.Write([]byte("dataaaaa"))
-	src.Close()
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello World\n"))
+	})
+	log.Println("Load balancer is listening on", lb.Port)
+	return http.ListenAndServe(lb.Port, nil)
 }

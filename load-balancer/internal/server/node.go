@@ -1,13 +1,13 @@
-package main
+package node
 
 type Server struct {
-	url    string
-	active bool
+	Url    string
+	Active bool
 }
 
 func (s *Server) markActive() {
-	s.active = true
+	s.Active = true
 }
 func (s *Server) markInactive() {
-	s.active = false
+	s.Active = false
 }
