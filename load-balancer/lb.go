@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	algo "github.com/load-balancer/load-balancer/internal/algorithm"
@@ -14,7 +15,7 @@ import (
 type LoadBalancer struct {
 	Port    string
 	ready   bool
-	servers []node.Server
+	servers []*node.Server
 	algo    algo.RoutingAlgorithm
 }
 
@@ -22,10 +23,10 @@ func NewLoadBalancer() *LoadBalancer {
 	return &LoadBalancer{
 		Port:  Config.Port,
 		ready: true,
-		servers: []node.Server{
-			{Url: "http://localhost:3002", Active: true},
-			{Url: "http://localhost:3003", Active: true},
-			{Url: "http://localhost:3004", Active: true},
+		servers: []*node.Server{
+			node.NewServer("http://localhost:3002"),
+			node.NewServer("http://localhost:3003"),
+			node.NewServer("http://localhost:3004"),
 		},
 	}
 }
@@ -34,8 +35,24 @@ func (lb *LoadBalancer) setRoutingAlgorithm(algo algo.RoutingAlgorithm) {
 	lb.algo = algo
 }
 
-func (lb *LoadBalancer) getServer() node.Server {
-	return lb.algo.GetNextServer(lb.servers)
+func (lb *LoadBalancer) getServer() *node.Server {
+	for {
+		server := lb.algo.GetNextServer(lb.servers)
+		if server.Active {
+			return server
+		}
+	}
+}
+func (lb *LoadBalancer) healthCheck() {
+	wg := &sync.WaitGroup{}
+	for {
+		for _, server := range lb.servers {
+			wg.Add(1)
+			go server.HealthCheck(wg)
+		}
+		wg.Wait()
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func (lb *LoadBalancer) ListenAndServe() error {
@@ -48,6 +65,7 @@ func (lb *LoadBalancer) ListenAndServe() error {
 		fmt.Fprintf(w, "Load balancer is %s", status)
 	})
 	http.HandleFunc("/", lb.handleConnection)
+	go lb.healthCheck()
 	log.Println("Load balancer is listening on", lb.Port)
 	return http.ListenAndServe(lb.Port, nil)
 }
@@ -66,6 +84,7 @@ func (lb *LoadBalancer) handleConnection(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	client := &http.Client{
+		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			MaxIdleConns:    10,
 			IdleConnTimeout: 3 * time.Second,
