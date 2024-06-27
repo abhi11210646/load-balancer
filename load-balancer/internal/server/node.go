@@ -1,7 +1,7 @@
 package node
 
 import (
-	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -23,7 +23,6 @@ func NewServer(url string) *Server {
 
 func (s *Server) HealthCheck(wg *sync.WaitGroup) {
 	defer wg.Done()
-	fmt.Println(s.Url)
 	req, err := http.NewRequest("GET", s.Url+"/health", nil)
 	if err != nil {
 		log.Println("error in http.NewRequest", err)
@@ -39,6 +38,10 @@ func (s *Server) HealthCheck(wg *sync.WaitGroup) {
 		return
 	}
 	defer res.Body.Close()
+
+	if _, err := io.ReadAll(res.Body); err != nil {
+		log.Println("error in reading response", err)
+	}
 
 	if res.StatusCode == http.StatusOK {
 		s.markActive()

@@ -36,19 +36,35 @@ func (lb *LoadBalancer) setRoutingAlgorithm(algo algo.RoutingAlgorithm) {
 }
 
 func (lb *LoadBalancer) getServer() *node.Server {
-	for {
+	c := 0
+	for c < len(lb.servers) {
 		server := lb.algo.GetNextServer(lb.servers)
 		if server.Active {
 			return server
 		}
+		c += 1
 	}
+	lb.ready = false
+	return nil
 }
+
 func (lb *LoadBalancer) healthCheck() {
 	wg := &sync.WaitGroup{}
 	for {
 		for _, server := range lb.servers {
 			wg.Add(1)
 			go server.HealthCheck(wg)
+		}
+		Inactive := true
+		for _, server := range lb.servers {
+			if server.Active {
+				Inactive = false
+				lb.ready = true
+				break
+			}
+		}
+		if Inactive {
+			lb.ready = false
 		}
 		wg.Wait()
 		time.Sleep(5 * time.Second)
@@ -71,7 +87,15 @@ func (lb *LoadBalancer) ListenAndServe() error {
 }
 
 func (lb *LoadBalancer) handleConnection(w http.ResponseWriter, r *http.Request) {
+	if !lb.ready {
+		http.Error(w, "Load balancer is offlie", http.StatusServiceUnavailable)
+		return
+	}
 	server := lb.getServer()
+	if server == nil {
+		http.Error(w, "No server is available to serve request", http.StatusServiceUnavailable)
+		return
+	}
 	req, err := http.NewRequest(r.Method, server.Url+r.URL.String(), r.Body)
 	if err != nil {
 		http.Error(w, "failed to create request", http.StatusInternalServerError)
