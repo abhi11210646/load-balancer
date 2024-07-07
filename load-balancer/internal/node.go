@@ -1,4 +1,4 @@
-package node
+package lb
 
 import (
 	"io"
@@ -34,7 +34,7 @@ func (s *Server) HealthCheck(wg *sync.WaitGroup) {
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		s.markInactive()
+		s.MarkInactive()
 		return
 	}
 	defer res.Body.Close()
@@ -44,18 +44,18 @@ func (s *Server) HealthCheck(wg *sync.WaitGroup) {
 	}
 
 	if res.StatusCode == http.StatusOK {
-		s.markActive()
+		s.MarkActive()
 		return
 	}
-	s.markInactive()
+	s.MarkInactive()
 }
 
-func (s *Server) markActive() {
+func (s *Server) MarkActive() {
 	s.mu.Lock()
 	s.Active = true
 	s.mu.Unlock()
 }
-func (s *Server) markInactive() {
+func (s *Server) MarkInactive() {
 	s.mu.Lock()
 	s.Active = false
 	s.mu.Unlock()

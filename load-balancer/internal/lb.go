@@ -1,51 +1,52 @@
-package main
+package lb
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"sync"
 	"time"
-
-	algo "github.com/load-balancer/load-balancer/internal/algorithm"
-	node "github.com/load-balancer/load-balancer/internal/server"
 )
 
 type LoadBalancer struct {
-	Port    string
-	ready   bool
-	servers []*node.Server
-	algo    algo.RoutingAlgorithm
+	port              int
+	ready             bool
+	servers           []*Server
+	algo              RoutingAlgorithm
+	heartBeatInterval int
 }
 
-func NewLoadBalancer() *LoadBalancer {
+func NewLoadBalancer(port int) *LoadBalancer {
 	return &LoadBalancer{
-		Port:  Config.Port,
-		ready: true,
-		servers: []*node.Server{
-			node.NewServer("http://localhost:3002"),
-			node.NewServer("http://localhost:3003"),
-			node.NewServer("http://localhost:3004"),
-		},
+		port:              port,
+		ready:             true,
+		heartBeatInterval: 5,
+		servers:           []*Server{},
 	}
 }
 
-func (lb *LoadBalancer) setRoutingAlgorithm(algo algo.RoutingAlgorithm) {
+func (lb *LoadBalancer) SetRoutingAlgorithm(algo RoutingAlgorithm) {
 	lb.algo = algo
 }
+func (lb *LoadBalancer) SetServers(nodes []string) {
+	for _, n := range nodes {
+		lb.servers = append(lb.servers, NewServer(n))
+	}
+}
 
-func (lb *LoadBalancer) getServer() *node.Server {
+func (lb *LoadBalancer) getServer() (*Server, error) {
 	c := 0
 	for c < len(lb.servers) {
 		server := lb.algo.GetNextServer(lb.servers)
 		if server.Active {
-			return server
+			return server, nil
 		}
 		c += 1
 	}
 	lb.ready = false
-	return nil
+	return nil, errors.New("no server is available to serve request")
 }
 
 func (lb *LoadBalancer) healthCheck() {
@@ -67,7 +68,7 @@ func (lb *LoadBalancer) healthCheck() {
 			lb.ready = false
 		}
 		wg.Wait()
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Duration(lb.heartBeatInterval) * time.Second)
 	}
 }
 
@@ -82,8 +83,8 @@ func (lb *LoadBalancer) ListenAndServe() error {
 	})
 	http.HandleFunc("/", lb.handleConnection)
 	go lb.healthCheck()
-	log.Println("Load balancer is listening on", lb.Port)
-	return http.ListenAndServe(lb.Port, nil)
+	log.Println("Load balancer is listening on", lb.port)
+	return http.ListenAndServe(fmt.Sprintf(":%d", lb.port), nil)
 }
 
 func (lb *LoadBalancer) handleConnection(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +92,9 @@ func (lb *LoadBalancer) handleConnection(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Load balancer is offlie", http.StatusServiceUnavailable)
 		return
 	}
-	server := lb.getServer()
-	if server == nil {
-		http.Error(w, "No server is available to serve request", http.StatusServiceUnavailable)
+	server, err := lb.getServer()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	req, err := http.NewRequest(r.Method, server.Url+r.URL.String(), r.Body)
@@ -116,6 +117,7 @@ func (lb *LoadBalancer) handleConnection(w http.ResponseWriter, r *http.Request)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		// server.MarkInactive()
 		http.Error(w, "Failed to forward request", http.StatusInternalServerError)
 		log.Println("error in client.Do", err.Error())
 		return
