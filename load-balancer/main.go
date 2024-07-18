@@ -19,19 +19,20 @@ func (s *stringSlice) Set(value string) error {
 	return nil
 }
 
+var (
+	PORT = flag.Int("p", 8080, "Load balancer PORT")
+)
+
 func main() {
-	var PORT int
 	var nodes stringSlice
-	flag.IntVar(&PORT, "p", 8080, "Load balancer PORT")
 	flag.Var(&nodes, "n", "List of servers to balance load")
 	flag.Parse()
 
-	loadBalancer := lb.NewLoadBalancer(PORT)
+	loadBalancer := lb.NewLoadBalancer(*PORT)
 	loadBalancer.SetRoutingAlgorithm(&lb.RoundRobin{})
 	loadBalancer.SetServers(nodes)
 
-	err := loadBalancer.ListenAndServe()
-	if err != nil {
+	if err := loadBalancer.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

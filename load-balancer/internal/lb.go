@@ -15,7 +15,7 @@ type LoadBalancer struct {
 	ready             bool
 	servers           []*Server
 	algo              RoutingAlgorithm
-	heartBeatInterval int
+	heartBeatInterval time.Duration
 }
 
 func NewLoadBalancer(port int) *LoadBalancer {
@@ -68,7 +68,7 @@ func (lb *LoadBalancer) healthCheck() {
 			lb.ready = false
 		}
 		wg.Wait()
-		time.Sleep(time.Duration(lb.heartBeatInterval) * time.Second)
+		time.Sleep(lb.heartBeatInterval * time.Second)
 	}
 }
 
