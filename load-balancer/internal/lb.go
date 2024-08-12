@@ -16,6 +16,7 @@ type LoadBalancer struct {
 	servers           []*Server
 	algo              RoutingAlgorithm
 	heartBeatInterval time.Duration
+	sync.Mutex
 }
 
 func NewLoadBalancer(port int) *LoadBalancer {
@@ -29,6 +30,16 @@ func NewLoadBalancer(port int) *LoadBalancer {
 
 func (lb *LoadBalancer) SetRoutingAlgorithm(algo RoutingAlgorithm) {
 	lb.algo = algo
+}
+func (lb *LoadBalancer) markUnhealthy() {
+	lb.Lock()
+	defer lb.Unlock()
+	lb.ready = false
+}
+func (lb *LoadBalancer) markHealthy() {
+	lb.Lock()
+	defer lb.Unlock()
+	lb.ready = true
 }
 func (lb *LoadBalancer) SetServers(nodes []string) {
 	for _, n := range nodes {
@@ -45,29 +56,29 @@ func (lb *LoadBalancer) getServer() (*Server, error) {
 		}
 		c += 1
 	}
-	lb.ready = false
+	lb.markUnhealthy()
 	return nil, errors.New("no server is available to serve request")
 }
 
 func (lb *LoadBalancer) healthCheck() {
 	wg := &sync.WaitGroup{}
 	for {
+		wg.Add(len(lb.servers))
 		for _, server := range lb.servers {
-			wg.Add(1)
 			go server.HealthCheck(wg)
 		}
+		wg.Wait()
 		Inactive := true
 		for _, server := range lb.servers {
 			if server.Active {
 				Inactive = false
-				lb.ready = true
+				lb.markHealthy()
 				break
 			}
 		}
 		if Inactive {
-			lb.ready = false
+			lb.markUnhealthy()
 		}
-		wg.Wait()
 		time.Sleep(lb.heartBeatInterval * time.Second)
 	}
 }

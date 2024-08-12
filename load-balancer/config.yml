@@ -1,0 +1,6 @@
+frontend:
+  port: 8080
+  heartBeatInterval: 5  # In seconds
+backend: 
+  - http://localhost:8081
+  - http://localhost:8082
